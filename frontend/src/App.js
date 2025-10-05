@@ -298,16 +298,16 @@ const Dashboard = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="search" className="flex items-center space-x-2">
+          <TabsList className="grid w-full grid-cols-3 bg-gray-100">
+            <TabsTrigger value="search" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
               <Search className="w-4 h-4" />
               <span>Search Programs</span>
             </TabsTrigger>
-            <TabsTrigger value="history" className="flex items-center space-x-2">
+            <TabsTrigger value="history" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
               <History className="w-4 h-4" />
               <span>Search History</span>
             </TabsTrigger>
-            <TabsTrigger value="account" className="flex items-center space-x-2">
+            <TabsTrigger value="account" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
               <Settings className="w-4 h-4" />
               <span>Account</span>
             </TabsTrigger>
