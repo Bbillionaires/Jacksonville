@@ -2,11 +2,15 @@ import requests
 import sys
 import json
 from datetime import datetime
+import uuid
 
 class JacksonvilleProgramsAPITester:
     def __init__(self, base_url="https://help-jacksonville.preview.emergentagent.com/api"):
         self.base_url = base_url
-        self.session_id = f"test_session_{datetime.now().strftime('%H%M%S')}"
+        self.test_user_email = f"test_user_{datetime.now().strftime('%H%M%S')}@example.com"
+        self.test_user_password = "TestPass123!"
+        self.test_user_name = "Test User"
+        self.access_token = None
         self.tests_run = 0
         self.tests_passed = 0
 
