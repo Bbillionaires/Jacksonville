@@ -13,7 +13,6 @@ from datetime import datetime, timezone, timedelta
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 import re
 import jwt
-from passlib.context import CryptContext
 import bcrypt
 
 ROOT_DIR = Path(__file__).parent
