@@ -14,14 +14,20 @@ class JacksonvilleProgramsAPITester:
         self.tests_run = 0
         self.tests_passed = 0
 
-    def run_test(self, name, method, endpoint, expected_status, data=None, params=None):
+    def run_test(self, name, method, endpoint, expected_status, data=None, params=None, auth_required=False):
         """Run a single API test"""
         url = f"{self.base_url}/{endpoint}"
         headers = {'Content-Type': 'application/json'}
+        
+        # Add authorization header if required and token is available
+        if auth_required and self.access_token:
+            headers['Authorization'] = f'Bearer {self.access_token}'
 
         self.tests_run += 1
         print(f"\n🔍 Testing {name}...")
         print(f"   URL: {url}")
+        if auth_required:
+            print(f"   Auth: {'✅ Token provided' if self.access_token else '❌ No token'}")
         
         try:
             if method == 'GET':
