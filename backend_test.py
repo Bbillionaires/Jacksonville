@@ -318,8 +318,8 @@ class JacksonvilleProgramsAPITester:
             return True, {}
 
 def main():
-    print("🚀 Starting Jacksonville Programs Finder API Tests")
-    print("=" * 60)
+    print("🚀 Starting Jacksonville Programs Finder API Tests (NEW Authentication System)")
+    print("=" * 80)
     
     tester = JacksonvilleProgramsAPITester()
     
@@ -338,39 +338,95 @@ def main():
         print("❌ Failed to get programs - stopping tests")
         return 1
 
-    # Test 4: Session info
-    tester.test_session_info()
-
-    # Test 5-7: AI Search tests with specific queries
-    print(f"\n{'='*60}")
-    print("🤖 Testing AI Search Functionality")
-    print("=" * 60)
+    # Authentication Tests
+    print(f"\n{'='*80}")
+    print("🔐 Testing Authentication System")
+    print("=" * 80)
     
-    # Test specific queries mentioned in the request
-    tester.test_ai_search("I need help with my electric bill", 1)
-    tester.test_ai_search("small business facade improvement grants", 1)
+    # Test 4: User registration
+    success, _ = tester.test_user_registration()
+    if not success:
+        print("❌ User registration failed - stopping tests")
+        return 1
+
+    # Test 5: Duplicate registration (should fail)
+    tester.test_duplicate_registration()
+
+    # Test 6: User login
+    success, _ = tester.test_user_login()
+    if not success:
+        print("❌ User login failed - stopping tests")
+        return 1
+
+    # Test 7: Invalid login (should fail)
+    tester.test_invalid_login()
+
+    # Test 8: Get current user info
+    success, _ = tester.test_get_current_user()
+    if not success:
+        print("❌ Get current user failed - stopping tests")
+        return 1
+
+    # Test 9: Unauthorized access (should fail)
+    tester.test_unauthorized_access()
+
+    # Search Tests with Authentication
+    print(f"\n{'='*80}")
+    print("🔍 Testing Authenticated Search System")
+    print("=" * 80)
     
-    # Test 8: Paywall trigger (3rd search)
-    tester.test_paywall_trigger()
-
-    # Test 9: Mock payment
-    tester.test_mock_payment()
-
-    # Test 10: Search after payment (should work)
-    tester.test_unlimited_search_after_payment()
-
-    # Test 11-12: CRUD operations
-    print(f"\n{'='*60}")
-    print("📝 Testing CRUD Operations")
-    print("=" * 60)
+    # Test 10-11: First two searches (should work)
+    success1, _ = tester.test_authenticated_search("I need help with my electric bill", 1)
+    success2, _ = tester.test_authenticated_search("small business facade improvement grants", 1)
     
-    tester.test_create_program()
-    tester.test_delete_program()
+    if not (success1 and success2):
+        print("❌ Authenticated searches failed - stopping tests")
+        return 1
+
+    # Test 12: Search history
+    tester.test_search_history = tester.test_get_search_history()
+
+    # Test 13: Third search (should trigger paywall)
+    tester.test_search_limit_trigger()
+
+    # Subscription Tests
+    print(f"\n{'='*80}")
+    print("💳 Testing Subscription System")
+    print("=" * 80)
+    
+    # Test 14: Subscribe user
+    success, _ = tester.test_subscribe_user()
+    if not success:
+        print("❌ User subscription failed")
+        return 1
+
+    # Test 15: Search after subscription (should work)
+    tester.test_unlimited_search_after_subscription()
+
+    # Test 16: Get updated search history
+    tester.test_get_search_history()
+
+    # Guest Mode Tests
+    print(f"\n{'='*80}")
+    print("👤 Testing Guest Mode")
+    print("=" * 80)
+    
+    # Test 17: Guest search
+    tester.test_guest_search()
+
+    # CRUD Tests with Authentication
+    print(f"\n{'='*80}")
+    print("📝 Testing Authenticated CRUD Operations")
+    print("=" * 80)
+    
+    # Test 18-19: Create and delete program
+    tester.test_create_program_authenticated()
+    tester.test_delete_program_authenticated()
 
     # Final results
-    print(f"\n{'='*60}")
+    print(f"\n{'='*80}")
     print("📊 TEST RESULTS SUMMARY")
-    print("=" * 60)
+    print("=" * 80)
     print(f"Tests passed: {tester.tests_passed}/{tester.tests_run}")
     
     if tester.tests_passed == tester.tests_run:
@@ -379,7 +435,14 @@ def main():
     else:
         failed = tester.tests_run - tester.tests_passed
         print(f"⚠️  {failed} test(s) failed")
-        return 1
+        
+        # Show critical failures
+        if tester.tests_passed < tester.tests_run * 0.5:
+            print("❌ More than 50% of tests failed - major issues detected")
+            return 2
+        else:
+            print("⚠️  Some tests failed but core functionality may be working")
+            return 1
 
 if __name__ == "__main__":
     sys.exit(main())
