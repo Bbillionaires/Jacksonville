@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Badge } from './components/ui/badge';
-import { Search, Phone, ExternalLink, MapPin, Users, Zap, Home, DollarSign, Heart, Briefcase, AlertCircle, Star } from 'lucide-react';
+import { Label } from './components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
+import { Search, Phone, ExternalLink, MapPin, Users, Zap, Home, DollarSign, Heart, Briefcase, AlertCircle, Star, User, LogOut, History, Settings } from 'lucide-react';
 import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner';
 import './App.css';
@@ -13,47 +15,423 @@ import './App.css';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-// Generate a simple session ID
-const getSessionId = () => {
-  let sessionId = localStorage.getItem('jax-finder-session');
-  if (!sessionId) {
-    sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    localStorage.setItem('jax-finder-session', sessionId);
+// Auth context
+const AuthContext = React.createContext();
+
+const useAuth = () => {
+  const context = React.useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
   }
-  return sessionId;
+  return context;
 };
 
-const HomePage = () => {
+const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    const token = localStorage.getItem('jax-finder-token');
+    if (token) {
+      try {
+        const response = await axios.get(`${API}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setUser(response.data);
+      } catch (error) {
+        localStorage.removeItem('jax-finder-token');
+      }
+    }
+    setLoading(false);
+  };
+
+  const login = async (email, password) => {
+    try {
+      const response = await axios.post(`${API}/auth/login`, { email, password });
+      const { access_token } = response.data;
+      localStorage.setItem('jax-finder-token', access_token);
+      await checkAuth();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.response?.data?.detail || 'Login failed' };
+    }
+  };
+
+  const register = async (email, full_name, password) => {
+    try {
+      await axios.post(`${API}/auth/register`, { email, full_name, password });
+      return await login(email, password);
+    } catch (error) {
+      return { success: false, error: error.response?.data?.detail || 'Registration failed' };
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('jax-finder-token');
+    setUser(null);
+  };
+
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('jax-finder-token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, login, register, logout, loading, getAuthHeaders }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+const LoginPage = () => {
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const { login, register } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    let result;
+    if (isLogin) {
+      result = await login(email, password);
+    } else {
+      if (!fullName.trim()) {
+        toast.error('Please enter your full name');
+        setIsLoading(false);
+        return;
+      }
+      result = await register(email, fullName, password);
+    }
+
+    if (result.success) {
+      toast.success(isLogin ? 'Welcome back!' : 'Account created successfully!');
+      navigate('/dashboard');
+    } else {
+      toast.error(result.error);
+    }
+    setIsLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full">
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center space-x-3 mb-4">
+            <div className="bg-gradient-to-r from-blue-600 to-orange-600 p-3 rounded-lg">
+              <MapPin className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">Jacksonville Programs Finder</h1>
+          </div>
+          <p className="text-gray-600">
+            {isLogin ? 'Sign in to your account' : 'Create your account to get started'}
+          </p>
+        </div>
+
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-center">
+              {isLogin ? 'Welcome Back' : 'Get Started'}
+            </CardTitle>
+            <CardDescription className="text-center">
+              {isLogin 
+                ? 'Sign in to access your search history and manage your subscription'
+                : 'Create an account to track your searches and save favorite programs'
+              }
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {!isLogin && (
+                <div>
+                  <Label htmlFor="fullName">Full Name</Label>
+                  <Input
+                    id="fullName"
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required={!isLogin}
+                    placeholder="Enter your full name"
+                  />
+                </div>
+              )}
+              
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  placeholder="Enter your email"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  placeholder="Enter your password"
+                  minLength={6}
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700"
+              >
+                {isLoading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
+              </Button>
+            </form>
+
+            <div className="mt-6 text-center">
+              <p className="text-sm text-gray-600">
+                {isLogin ? "Don't have an account?" : "Already have an account?"}{' '}
+                <button
+                  type="button"
+                  onClick={() => setIsLogin(!isLogin)}
+                  className="text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  {isLogin ? 'Sign up' : 'Sign in'}
+                </button>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="mt-8 text-center">
+          <Link to="/guest" className="text-blue-600 hover:text-blue-700 text-sm">
+            Continue as guest (limited features)
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const Dashboard = () => {
+  const { user, logout, getAuthHeaders } = useAuth();
+  const [searchHistory, setSearchHistory] = useState([]);
+  const [activeTab, setActiveTab] = useState('search');
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    loadSearchHistory();
+  }, []);
+
+  const loadSearchHistory = async () => {
+    try {
+      const response = await axios.get(`${API}/user/search-history`, {
+        headers: getAuthHeaders()
+      });
+      setSearchHistory(response.data);
+    } catch (error) {
+      console.error('Error loading search history:', error);
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/auth');
+    toast.success('Logged out successfully');
+  };
+
+  const handleSubscribe = async () => {
+    try {
+      await axios.post(`${API}/payment/subscribe`, {}, {
+        headers: getAuthHeaders()
+      });
+      toast.success('Subscription activated! You now have unlimited searches.');
+      window.location.reload(); // Reload to update user data
+    } catch (error) {
+      toast.error('Subscription failed. Please try again.');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50">
+      {/* Header */}
+      <header className="bg-white/80 backdrop-blur-md border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="bg-gradient-to-r from-blue-600 to-orange-600 p-2 rounded-lg">
+                <MapPin className="w-8 h-8 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Jacksonville Programs Finder</h1>
+                <p className="text-sm text-gray-600">Welcome back, {user?.full_name}</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <div className="text-right">
+                <p className="text-sm font-medium text-gray-900">
+                  Searches: {user?.searches_used || 0}/2 {user?.has_subscription && "(Unlimited)"}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {user?.has_subscription ? 'Premium Member' : 'Free Account'}
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleLogout}>
+                <LogOut className="w-4 h-4 mr-1" />
+                Logout
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="search" className="flex items-center space-x-2">
+              <Search className="w-4 h-4" />
+              <span>Search Programs</span>
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center space-x-2">
+              <History className="w-4 h-4" />
+              <span>Search History</span>
+            </TabsTrigger>
+            <TabsTrigger value="account" className="flex items-center space-x-2">
+              <Settings className="w-4 h-4" />
+              <span>Account</span>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="search" className="mt-8">
+            <SearchInterface />
+          </TabsContent>
+
+          <TabsContent value="history" className="mt-8">
+            <Card>
+              <CardHeader>
+                <CardTitle>Your Search History</CardTitle>
+                <CardDescription>
+                  View your recent searches and results
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {searchHistory.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8">
+                    No search history yet. Try searching for programs to get started!
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    {searchHistory.map((search, index) => (
+                      <div key={search.id || index} className="border rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="font-medium text-gray-900">"{search.query}"</h3>
+                          <span className="text-sm text-gray-500">
+                            {new Date(search.search_date).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2">{search.search_explanation}</p>
+                        <p className="text-xs text-gray-500">
+                          Found {search.results_count} programs
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="account" className="mt-8">
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Account Information</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Full Name</Label>
+                    <p className="text-gray-900">{user?.full_name}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Email</Label>
+                    <p className="text-gray-900">{user?.email}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Member Since</Label>
+                    <p className="text-gray-900">
+                      {new Date(user?.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Searches Used</Label>
+                    <p className="text-gray-900">
+                      {user?.searches_used || 0} {user?.has_subscription ? '(Unlimited)' : '/ 2 free'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Subscription Status</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {user?.has_subscription ? (
+                    <div className="text-center">
+                      <div className="bg-green-100 text-green-800 px-4 py-2 rounded-full inline-block mb-4">
+                        Premium Member
+                      </div>
+                      <p className="text-gray-600 mb-4">
+                        You have unlimited searches and full access to all programs.
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Subscribed on: {new Date(user?.subscription_date).toLocaleDateString()}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <div className="bg-gray-100 text-gray-800 px-4 py-2 rounded-full inline-block mb-4">
+                        Free Account
+                      </div>
+                      <p className="text-gray-600 mb-4">
+                        You have {2 - (user?.searches_used || 0)} free searches remaining.
+                      </p>
+                      <Button 
+                        onClick={handleSubscribe}
+                        className="bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700"
+                      >
+                        Upgrade to Premium - $1/month
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+};
+
+const SearchInterface = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchExplanation, setSearchExplanation] = useState('');
-  const [sessionInfo, setSessionInfo] = useState(null);
   const [showPaywall, setShowPaywall] = useState(false);
-
-  const sessionId = getSessionId();
-
-  useEffect(() => {
-    loadSessionInfo();
-    initializePrograms();
-  }, []);
-
-  const initializePrograms = async () => {
-    try {
-      await axios.post(`${API}/admin/init-programs`);
-    } catch (error) {
-      console.log('Programs already initialized or error:', error);
-    }
-  };
-
-  const loadSessionInfo = async () => {
-    try {
-      const response = await axios.get(`${API}/session/${sessionId}`);
-      setSessionInfo(response.data);
-    } catch (error) {
-      console.error('Error loading session info:', error);
-    }
-  };
+  const { user, getAuthHeaders } = useAuth();
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -63,16 +441,15 @@ const HomePage = () => {
 
     setIsLoading(true);
     try {
-      const response = await axios.post(`${API}/search?session_id=${sessionId}`, {
+      const response = await axios.post(`${API}/search`, {
         query: searchQuery
+      }, {
+        headers: getAuthHeaders()
       });
       
       setSearchResults(response.data.programs);
       setSearchExplanation(response.data.search_explanation);
       toast.success(`Found ${response.data.total_found} relevant programs!`);
-      
-      // Refresh session info
-      await loadSessionInfo();
     } catch (error) {
       if (error.response?.status === 402) {
         setShowPaywall(true);
@@ -86,14 +463,16 @@ const HomePage = () => {
     }
   };
 
-  const handleMockPayment = async () => {
+  const handleSubscribe = async () => {
     try {
-      await axios.post(`${API}/payment/mock-success/${sessionId}`);
+      await axios.post(`${API}/payment/subscribe`, {}, {
+        headers: getAuthHeaders()
+      });
       setShowPaywall(false);
-      await loadSessionInfo();
-      toast.success('Payment successful! You now have unlimited searches.');
+      toast.success('Subscription activated! You now have unlimited searches.');
+      window.location.reload();
     } catch (error) {
-      toast.error('Payment failed. Please try again.');
+      toast.error('Subscription failed. Please try again.');
     }
   };
 
@@ -128,73 +507,37 @@ const HomePage = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="bg-gradient-to-r from-blue-600 to-orange-600 p-2 rounded-lg">
-                <MapPin className="w-8 h-8 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Jacksonville Programs Finder</h1>
-                <p className="text-sm text-gray-600">Find assistance programs in Duval County</p>
-              </div>
-            </div>
-            
-            {sessionInfo && (
-              <div className="text-right">
-                <p className="text-sm text-gray-600">
-                  Searches: {sessionInfo.searches_used}/2 {sessionInfo.has_paid && "(Unlimited)"}
-                </p>
-                <p className="text-xs text-gray-500">
-                  {typeof sessionInfo.searches_remaining === 'number' 
-                    ? `${sessionInfo.searches_remaining} free searches left`
-                    : 'Unlimited searches'
-                  }
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Hero Section */}
-        <div className="text-center mb-12">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Find Government & Community Assistance
-          </h2>
-          <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            Search for grants, utility help, housing aid, food banks, business incentives, and more - all in one place. 
-            Just describe what you need in plain English.
-          </p>
-
-          {/* Search Box */}
-          <div className="max-w-2xl mx-auto mb-8">
-            <div className="relative">
-              <Input
-                type="text"
-                placeholder="Try: 'I need help with my electric bill' or 'small business grants'"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                className="w-full text-lg py-4 pl-12 pr-24 rounded-2xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
-              />
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <Button 
-                onClick={handleSearch}
-                disabled={isLoading}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700 text-white px-6 py-2 rounded-xl transition-all"
-              >
-                {isLoading ? 'Searching...' : 'Search'}
-              </Button>
-            </div>
+    <div className="space-y-8">
+      {/* Search Box */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Search for Assistance Programs</CardTitle>
+          <CardDescription>
+            Describe what you need in plain English - our AI will find relevant programs for you.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="relative">
+            <Input
+              type="text"
+              placeholder="Try: 'I need help with my electric bill' or 'small business grants'"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              className="text-lg py-3 pl-12 pr-24"
+            />
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <Button 
+              onClick={handleSearch}
+              disabled={isLoading}
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700"
+            >
+              {isLoading ? 'Searching...' : 'Search'}
+            </Button>
           </div>
 
           {/* Search Suggestions */}
-          <div className="flex flex-wrap justify-center gap-2 mb-8">
+          <div className="flex flex-wrap gap-2">
             <p className="w-full text-sm text-gray-500 mb-2">Try these examples:</p>
             {searchSuggestions.map((suggestion, index) => (
               <button
@@ -206,123 +549,186 @@ const HomePage = () => {
               </button>
             ))}
           </div>
-        </div>
+        </CardContent>
+      </Card>
 
-        {/* Paywall Modal */}
-        {showPaywall && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <Card className="max-w-md w-full">
-              <CardHeader className="text-center">
-                <CardTitle className="flex items-center justify-center space-x-2">
-                  <AlertCircle className="w-6 h-6 text-orange-500" />
-                  <span>Unlock Unlimited Searches</span>
-                </CardTitle>
-                <CardDescription>
-                  You've used your 2 free searches. Subscribe for unlimited access to all Jacksonville assistance programs.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-gradient-to-r from-blue-50 to-orange-50 p-4 rounded-lg">
-                  <h3 className="font-semibold text-gray-900 mb-2">Monthly Subscription</h3>
-                  <p className="text-2xl font-bold text-gray-900">$1.00 <span className="text-sm font-normal text-gray-600">/month</span></p>
-                  <p className="text-sm text-gray-600 mt-1">Unlimited searches • New programs added regularly • Mobile access</p>
-                </div>
-                <div className="flex space-x-2">
-                  <Button 
-                    onClick={handleMockPayment}
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700"
-                  >
-                    Subscribe Now (Mock Payment)
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowPaywall(false)}
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                </div>
+      {/* Paywall Modal */}
+      {showPaywall && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <Card className="max-w-md w-full">
+            <CardHeader className="text-center">
+              <CardTitle className="flex items-center justify-center space-x-2">
+                <AlertCircle className="w-6 h-6 text-orange-500" />
+                <span>Unlock Unlimited Searches</span>
+              </CardTitle>
+              <CardDescription>
+                You've used your 2 free searches. Subscribe for unlimited access to all Jacksonville assistance programs.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="bg-gradient-to-r from-blue-50 to-orange-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-gray-900 mb-2">Premium Membership</h3>
+                <p className="text-2xl font-bold text-gray-900">$1.00 <span className="text-sm font-normal text-gray-600">/month</span></p>
+                <p className="text-sm text-gray-600 mt-1">Unlimited searches • New programs added regularly • Search history</p>
+              </div>
+              <div className="flex space-x-2">
+                <Button 
+                  onClick={handleSubscribe}
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700"
+                >
+                  Subscribe Now
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowPaywall(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Search Results */}
+      {searchResults.length > 0 && (
+        <div>
+          {searchExplanation && (
+            <Card className="mb-6">
+              <CardContent className="pt-6">
+                <h3 className="font-semibold text-blue-900 mb-2">Why these programs match your search:</h3>
+                <p className="text-blue-800">{searchExplanation}</p>
               </CardContent>
             </Card>
-          </div>
-        )}
+          )}
 
-        {/* Search Results */}
-        {searchResults.length > 0 && (
-          <div className="mb-8">
-            {searchExplanation && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <h3 className="font-semibold text-blue-900 mb-2">Search Results Explanation</h3>
-                <p className="text-blue-800">{searchExplanation}</p>
-              </div>
-            )}
-
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {searchResults.map((program) => (
-                <Card key={program.id} className="hover:shadow-lg transition-shadow duration-300 border-l-4 border-l-blue-500">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-lg leading-tight mb-2">{program.program}</CardTitle>
-                        <Badge className={`${getCategoryColor(program.category)} mb-2`}>
-                          <div className="flex items-center space-x-1">
-                            {getCategoryIcon(program.category)}
-                            <span className="text-xs">{program.category}</span>
-                          </div>
-                        </Badge>
-                      </div>
-                    </div>
-                    <CardDescription className="text-sm">
-                      <div className="flex items-center text-gray-600 mb-1">
-                        <Users className="w-4 h-4 mr-1" />
-                        {program.agency}
-                      </div>
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <div className="space-y-3">
-                      <div>
-                        <h4 className="font-medium text-sm text-gray-900 mb-1">Eligibility:</h4>
-                        <p className="text-sm text-gray-600">{program.eligibility}</p>
-                      </div>
-                      
-                      {program.notes && (
-                        <div>
-                          <h4 className="font-medium text-sm text-gray-900 mb-1">Benefits:</h4>
-                          <p className="text-sm text-gray-600">{program.notes}</p>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {searchResults.map((program) => (
+              <Card key={program.id} className="hover:shadow-lg transition-shadow duration-300 border-l-4 border-l-blue-500">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <CardTitle className="text-lg leading-tight mb-2">{program.program}</CardTitle>
+                      <Badge className={`${getCategoryColor(program.category)} mb-2`}>
+                        <div className="flex items-center space-x-1">
+                          {getCategoryIcon(program.category)}
+                          <span className="text-xs">{program.category}</span>
                         </div>
-                      )}
-                      
-                      <div className="flex flex-col space-y-2 pt-2">
-                        <a
-                          href={program.apply_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700 text-white text-sm font-medium rounded-lg transition-all"
-                        >
-                          <ExternalLink className="w-4 h-4 mr-2" />
-                          Apply Now
-                        </a>
-                        
-                        {program.phone && (
-                          <a
-                            href={`tel:${program.phone}`}
-                            className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 hover:border-gray-400 text-gray-700 text-sm font-medium rounded-lg transition-all"
-                          >
-                            <Phone className="w-4 h-4 mr-2" />
-                            {program.phone}
-                          </a>
-                        )}
-                      </div>
+                      </Badge>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
+                  </div>
+                  <CardDescription className="text-sm">
+                    <div className="flex items-center text-gray-600 mb-1">
+                      <Users className="w-4 h-4 mr-1" />
+                      {program.agency}
+                    </div>
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-3">
+                    <div>
+                      <h4 className="font-medium text-sm text-gray-900 mb-1">Eligibility:</h4>
+                      <p className="text-sm text-gray-600">{program.eligibility}</p>
+                    </div>
+                    
+                    {program.notes && (
+                      <div>
+                        <h4 className="font-medium text-sm text-gray-900 mb-1">Benefits:</h4>
+                        <p className="text-sm text-gray-600">{program.notes}</p>
+                      </div>
+                    )}
+                    
+                    <div className="flex flex-col space-y-2 pt-2">
+                      <a
+                        href={program.apply_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700 text-white text-sm font-medium rounded-lg transition-all"
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Apply Now
+                      </a>
+                      
+                      {program.phone && (
+                        <a
+                          href={`tel:${program.phone}`}
+                          className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 hover:border-gray-400 text-gray-700 text-sm font-medium rounded-lg transition-all"
+                        >
+                          <Phone className="w-4 h-4 mr-2" />
+                          {program.phone}
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const GuestPage = () => {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50">
+      <header className="bg-white/80 backdrop-blur-md border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="bg-gradient-to-r from-blue-600 to-orange-600 p-2 rounded-lg">
+                <MapPin className="w-8 h-8 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Jacksonville Programs Finder</h1>
+                <p className="text-sm text-gray-600">Guest Mode - Limited Features</p>
+              </div>
+            </div>
+            
+            <div className="flex space-x-2">
+              <Link to="/auth">
+                <Button variant="outline" size="sm">
+                  Sign In
+                </Button>
+              </Link>
+              <Link to="/auth">
+                <Button size="sm" className="bg-gradient-to-r from-blue-600 to-orange-600">
+                  Sign Up
+                </Button>
+              </Link>
             </div>
           </div>
-        )}
+        </div>
+      </header>
 
-        {/* Features Section */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">
+            Preview: Jacksonville Assistance Programs
+          </h2>
+          <p className="text-xl text-gray-600 mb-6">
+            Sign up for unlimited AI-powered search and full access to all programs
+          </p>
+          
+          <Card className="max-w-2xl mx-auto mb-8">
+            <CardContent className="pt-6">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-center">
+                  <AlertCircle className="w-5 h-5 text-yellow-600 mr-3" />
+                  <div className="text-left">
+                    <h3 className="font-medium text-yellow-800">Limited Guest Access</h3>
+                    <p className="text-sm text-yellow-600 mt-1">
+                      Create a free account to access AI-powered search, track your search history, and get 2 free searches per month.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         <div className="grid md:grid-cols-3 gap-8 mb-12">
           <div className="text-center">
             <div className="bg-gradient-to-r from-blue-600 to-orange-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -334,10 +740,10 @@ const HomePage = () => {
           
           <div className="text-center">
             <div className="bg-gradient-to-r from-blue-600 to-orange-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-              <MapPin className="w-8 h-8 text-white" />
+              <History className="w-8 h-8 text-white" />
             </div>
-            <h3 className="text-xl font-semibold mb-2">Local Focus</h3>
-            <p className="text-gray-600">All programs are specifically for Jacksonville and Duval County residents.</p>
+            <h3 className="text-xl font-semibold mb-2">Search History</h3>
+            <p className="text-gray-600">Track your searches and easily revisit programs you're interested in.</p>
           </div>
           
           <div className="text-center">
@@ -348,231 +754,58 @@ const HomePage = () => {
             <p className="text-gray-600">Only $1/month for unlimited searches - making help accessible to everyone.</p>
           </div>
         </div>
-      </div>
 
-      {/* Footer */}
-      <footer className="bg-gray-900 text-white py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h3 className="text-lg font-semibold mb-2">Jacksonville Programs Finder</h3>
-            <p className="text-gray-400 mb-4">Connecting residents with assistance programs in Duval County</p>
-            <p className="text-sm text-gray-500">
-              Not affiliated with the City of Jacksonville. For official information, visit program websites directly.
-            </p>
-          </div>
+        <div className="text-center">
+          <Link to="/auth">
+            <Button size="lg" className="bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700">
+              Get Started - Create Free Account
+            </Button>
+          </Link>
         </div>
-      </footer>
-
-      <Toaster />
-    </div>
-  );
-};
-
-const AdminPage = () => {
-  const [programs, setPrograms] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [newProgram, setNewProgram] = useState({
-    program: '',
-    category: '',
-    agency: '',
-    eligibility: '',
-    apply_url: '',
-    phone: '',
-    notes: '',
-    source: ''
-  });
-
-  useEffect(() => {
-    loadPrograms();
-  }, []);
-
-  const loadPrograms = async () => {
-    setIsLoading(true);
-    try {
-      const response = await axios.get(`${API}/programs`);
-      setPrograms(response.data);
-    } catch (error) {
-      toast.error('Failed to load programs');
-      console.error('Error loading programs:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleAddProgram = async (e) => {
-    e.preventDefault();
-    try {
-      await axios.post(`${API}/programs`, newProgram);
-      toast.success('Program added successfully!');
-      setNewProgram({
-        program: '',
-        category: '',
-        agency: '',
-        eligibility: '',
-        apply_url: '',
-        phone: '',
-        notes: '',
-        source: ''
-      });
-      loadPrograms();
-    } catch (error) {
-      toast.error('Failed to add program');
-      console.error('Error adding program:', error);
-    }
-  };
-
-  const handleDeleteProgram = async (programId) => {
-    if (window.confirm('Are you sure you want to delete this program?')) {
-      try {
-        await axios.delete(`${API}/programs/${programId}`);
-        toast.success('Program deleted successfully');
-        loadPrograms();
-      } catch (error) {
-        toast.error('Failed to delete program');
-        console.error('Error deleting program:', error);
-      }
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="text-gray-600">Manage Jacksonville assistance programs</p>
-        </div>
-      </header>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Add New Program Form */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Add New Program</CardTitle>
-            <CardDescription>Enter details for a new assistance program</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleAddProgram} className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Program Name</label>
-                <Input
-                  value={newProgram.program}
-                  onChange={(e) => setNewProgram({...newProgram, program: e.target.value})}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Category</label>
-                <Input
-                  value={newProgram.category}
-                  onChange={(e) => setNewProgram({...newProgram, category: e.target.value})}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Agency</label>
-                <Input
-                  value={newProgram.agency}
-                  onChange={(e) => setNewProgram({...newProgram, agency: e.target.value})}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Phone</label>
-                <Input
-                  value={newProgram.phone}
-                  onChange={(e) => setNewProgram({...newProgram, phone: e.target.value})}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium mb-1">Eligibility</label>
-                <Input
-                  value={newProgram.eligibility}
-                  onChange={(e) => setNewProgram({...newProgram, eligibility: e.target.value})}
-                  required
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium mb-1">Apply URL</label>
-                <Input
-                  type="url"
-                  value={newProgram.apply_url}
-                  onChange={(e) => setNewProgram({...newProgram, apply_url: e.target.value})}
-                  required
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium mb-1">Notes</label>
-                <Input
-                  value={newProgram.notes}
-                  onChange={(e) => setNewProgram({...newProgram, notes: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Source</label>
-                <Input
-                  value={newProgram.source}
-                  onChange={(e) => setNewProgram({...newProgram, source: e.target.value})}
-                  required
-                />
-              </div>
-              <div className="flex items-end">
-                <Button type="submit" className="w-full">Add Program</Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* Programs List */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Current Programs ({programs.length})</CardTitle>
-            <CardDescription>Manage existing assistance programs</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <p>Loading programs...</p>
-            ) : (
-              <div className="space-y-4">
-                {programs.map((program) => (
-                  <div key={program.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h3 className="font-semibold">{program.program}</h3>
-                        <p className="text-sm text-gray-600">{program.agency}</p>
-                        <Badge className="mt-1">{program.category}</Badge>
-                      </div>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDeleteProgram(program.id)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
-
-      <Toaster />
     </div>
   );
 };
 
 function App() {
   return (
-    <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/admin" element={<AdminPage />} />
-        </Routes>
-      </BrowserRouter>
-    </div>
+    <AuthProvider>
+      <div className="App">
+        <BrowserRouter>
+          <Routes>
+            <Route path="/auth" element={<LoginPage />} />
+            <Route path="/guest" element={<GuestPage />} />
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/" element={<Navigate to="/auth" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </div>
+      <Toaster />
+    </AuthProvider>
   );
 }
+
+const ProtectedRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="bg-gradient-to-r from-blue-600 to-orange-600 p-3 rounded-lg mb-4 mx-auto w-fit">
+            <MapPin className="w-8 h-8 text-white" />
+          </div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
+  
+  return children;
+};
 
 export default App;
