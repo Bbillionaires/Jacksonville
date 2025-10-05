@@ -70,7 +70,7 @@ class JacksonvilleProgramsAPITester:
         return self.run_test("Initialize Programs", "POST", "admin/init-programs", 200)
 
     def test_get_all_programs(self):
-        """Test getting all programs"""
+        """Test getting all programs (admin view)"""
         success, response = self.run_test("Get All Programs", "GET", "programs", 200)
         if success and isinstance(response, list):
             print(f"   Found {len(response)} programs")
@@ -78,19 +78,120 @@ class JacksonvilleProgramsAPITester:
                 print(f"   Sample program: {response[0].get('program', 'N/A')}")
         return success, response
 
-    def test_session_info(self):
-        """Test getting session information"""
-        return self.run_test("Get Session Info", "GET", f"session/{self.session_id}", 200)
-
-    def test_ai_search(self, query, expected_programs_min=1):
-        """Test AI-powered search"""
+    def test_user_registration(self):
+        """Test user registration"""
+        user_data = {
+            "email": self.test_user_email,
+            "full_name": self.test_user_name,
+            "password": self.test_user_password
+        }
+        
         success, response = self.run_test(
-            f"AI Search: '{query}'",
+            "User Registration",
+            "POST",
+            "auth/register",
+            200,
+            data=user_data
+        )
+        
+        if success:
+            print(f"   Registered user: {response.get('email', 'N/A')}")
+            print(f"   User ID: {response.get('id', 'N/A')}")
+            print(f"   Searches used: {response.get('searches_used', 0)}")
+            print(f"   Has subscription: {response.get('has_subscription', False)}")
+        
+        return success, response
+
+    def test_duplicate_registration(self):
+        """Test duplicate user registration (should fail)"""
+        user_data = {
+            "email": self.test_user_email,
+            "full_name": self.test_user_name,
+            "password": self.test_user_password
+        }
+        
+        return self.run_test(
+            "Duplicate Registration (should fail)",
+            "POST",
+            "auth/register",
+            400,  # Should fail with 400
+            data=user_data
+        )
+
+    def test_user_login(self):
+        """Test user login"""
+        login_data = {
+            "email": self.test_user_email,
+            "password": self.test_user_password
+        }
+        
+        success, response = self.run_test(
+            "User Login",
+            "POST",
+            "auth/login",
+            200,
+            data=login_data
+        )
+        
+        if success and 'access_token' in response:
+            self.access_token = response['access_token']
+            print(f"   Access token received: {self.access_token[:20]}...")
+            print(f"   Token type: {response.get('token_type', 'N/A')}")
+        
+        return success, response
+
+    def test_invalid_login(self):
+        """Test login with invalid credentials"""
+        login_data = {
+            "email": self.test_user_email,
+            "password": "wrong_password"
+        }
+        
+        return self.run_test(
+            "Invalid Login (should fail)",
+            "POST",
+            "auth/login",
+            401,  # Should fail with 401
+            data=login_data
+        )
+
+    def test_get_current_user(self):
+        """Test getting current user info with JWT token"""
+        return self.run_test(
+            "Get Current User Info",
+            "GET",
+            "auth/me",
+            200,
+            auth_required=True
+        )
+
+    def test_unauthorized_access(self):
+        """Test accessing protected endpoint without token"""
+        # Temporarily remove token
+        temp_token = self.access_token
+        self.access_token = None
+        
+        success, response = self.run_test(
+            "Unauthorized Access (should fail)",
+            "GET",
+            "auth/me",
+            401,  # Should fail with 401
+            auth_required=False
+        )
+        
+        # Restore token
+        self.access_token = temp_token
+        return success, response
+
+    def test_authenticated_search(self, query, expected_programs_min=1):
+        """Test AI-powered search with authentication"""
+        success, response = self.run_test(
+            f"Authenticated Search: '{query}'",
             "POST",
             "search",
             200,
             data={"query": query},
-            params={"session_id": self.session_id}
+            auth_required=True
         )
         
         if success:
@@ -110,41 +211,72 @@ class JacksonvilleProgramsAPITester:
         
         return success, response
 
-    def test_paywall_trigger(self):
-        """Test paywall after 2 searches"""
-        print(f"\n🔍 Testing Paywall (3rd search should trigger 402)...")
-        success, response = self.run_test(
-            "Paywall Trigger (3rd search)",
+    def test_search_limit_trigger(self):
+        """Test search limit after 2 searches (3rd should trigger 402)"""
+        return self.run_test(
+            "Search Limit Trigger (3rd search should fail)",
             "POST",
             "search",
             402,  # Expecting paywall error
-            data={"query": "test paywall"},
-            params={"session_id": self.session_id}
+            data={"query": "test search limit"},
+            auth_required=True
         )
+
+    def test_get_search_history(self):
+        """Test getting user's search history"""
+        success, response = self.run_test(
+            "Get Search History",
+            "GET",
+            "user/search-history",
+            200,
+            auth_required=True
+        )
+        
+        if success and isinstance(response, list):
+            print(f"   Found {len(response)} search history entries")
+            for i, search in enumerate(response[:2]):  # Show first 2 searches
+                print(f"   Search {i+1}: '{search.get('query', 'N/A')}' - {search.get('results_count', 0)} results")
+        
         return success, response
 
-    def test_mock_payment(self):
-        """Test mock payment success"""
-        return self.run_test(
-            "Mock Payment Success",
+    def test_subscribe_user(self):
+        """Test user subscription"""
+        success, response = self.run_test(
+            "Subscribe User",
             "POST",
-            f"payment/mock-success/{self.session_id}",
-            200
+            "payment/subscribe",
+            200,
+            auth_required=True
         )
+        
+        if success:
+            print(f"   Subscription message: {response.get('message', 'N/A')}")
+        
+        return success, response
 
-    def test_unlimited_search_after_payment(self):
-        """Test search after payment (should work)"""
+    def test_unlimited_search_after_subscription(self):
+        """Test search after subscription (should work even after limit)"""
         return self.run_test(
-            "Search After Payment",
+            "Search After Subscription",
             "POST",
             "search",
             200,
-            data={"query": "test after payment"},
-            params={"session_id": self.session_id}
+            data={"query": "test unlimited search"},
+            auth_required=True
         )
 
-    def test_create_program(self):
-        """Test creating a new program"""
+    def test_guest_search(self):
+        """Test guest search endpoint"""
+        return self.run_test(
+            "Guest Search (limited)",
+            "POST",
+            "search-guest",
+            200,
+            data={"query": "test guest search"}
+        )
+
+    def test_create_program_authenticated(self):
+        """Test creating a new program (authenticated)"""
         test_program = {
             "program": "Test Program for API Testing",
             "category": "Test Category",
@@ -157,11 +289,12 @@ class JacksonvilleProgramsAPITester:
         }
         
         success, response = self.run_test(
-            "Create New Program",
+            "Create New Program (Authenticated)",
             "POST",
             "programs",
             200,
-            data=test_program
+            data=test_program,
+            auth_required=True
         )
         
         if success and 'id' in response:
@@ -170,14 +303,15 @@ class JacksonvilleProgramsAPITester:
         
         return success, response
 
-    def test_delete_program(self):
-        """Test deleting a program"""
+    def test_delete_program_authenticated(self):
+        """Test deleting a program (authenticated)"""
         if hasattr(self, 'test_program_id'):
             return self.run_test(
-                "Delete Test Program",
+                "Delete Test Program (Authenticated)",
                 "DELETE",
                 f"programs/{self.test_program_id}",
-                200
+                200,
+                auth_required=True
             )
         else:
             print("⚠️  Skipping delete test - no test program ID available")
