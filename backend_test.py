@@ -175,7 +175,7 @@ class JacksonvilleProgramsAPITester:
             "Unauthorized Access (should fail)",
             "GET",
             "auth/me",
-            401,  # Should fail with 401
+            403,  # Should fail with 403 (FastAPI returns 403 for missing auth)
             auth_required=False
         )
         
