@@ -375,18 +375,27 @@ const LoginPage = () => {
               </Button>
             </form>
 
-            <div className="mt-6 text-center">
-              <p className="text-sm text-gray-600">
-                {isLogin ? "Don't have an account?" : "Already have an account?"}{' '}
-                <button
-                  type="button"
-                  onClick={() => setIsLogin(!isLogin)}
-                  className="text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  {isLogin ? 'Sign up' : 'Sign in'}
-                </button>
-              </p>
-            </div>
+              <div className="mt-6 text-center">
+                <p className="text-sm text-gray-600 mb-2">
+                  {isLogin ? "Don't have an account?" : "Already have an account?"}{' '}
+                  <button
+                    type="button"
+                    onClick={() => setIsLogin(!isLogin)}
+                    className="text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    {isLogin ? 'Sign up' : 'Sign in'}
+                  </button>
+                </p>
+                {isLogin && (
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="text-blue-600 hover:text-blue-700 text-sm"
+                  >
+                    Forgot password?
+                  </button>
+                )}
+              </div>
           </CardContent>
         </Card>
 
