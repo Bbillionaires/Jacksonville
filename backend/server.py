@@ -133,6 +133,8 @@ def prepare_for_mongo(data):
         data['subscription_date'] = data['subscription_date'].isoformat()
     if isinstance(data.get('last_login'), datetime):
         data['last_login'] = data['last_login'].isoformat()
+    if isinstance(data.get('reset_token_expires'), datetime):
+        data['reset_token_expires'] = data['reset_token_expires'].isoformat()
     return data
 
 def parse_from_mongo(item):
@@ -144,6 +146,8 @@ def parse_from_mongo(item):
         item['subscription_date'] = datetime.fromisoformat(item['subscription_date'])
     if isinstance(item.get('last_login'), str):
         item['last_login'] = datetime.fromisoformat(item['last_login'])
+    if isinstance(item.get('reset_token_expires'), str):
+        item['reset_token_expires'] = datetime.fromisoformat(item['reset_token_expires'])
     return item
 
 # Password hashing
