@@ -443,6 +443,56 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """Get current user information"""
     return UserResponse(**current_user.dict())
 
+@api_router.post("/auth/forgot-password", response_model=ForgotPasswordResponse)
+async def forgot_password(request: ForgotPasswordRequest):
+    """Generate password reset token"""
+    user = await get_user_by_email(request.email)
+    if not user:
+        # Return success message even if user doesn't exist (security best practice)
+        return ForgotPasswordResponse(
+            message="If your email is registered, you will receive a reset token",
+            reset_token="USER_NOT_FOUND"
+        )
+    
+    # Generate reset token
+    reset_token = create_reset_token()
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)  # Token expires in 1 hour
+    
+    # Update user with reset token
+    user.reset_token = reset_token
+    user.reset_token_expires = expires_at
+    user_dict = prepare_for_mongo(user.dict())
+    await db.users.update_one({"id": user.id}, {"$set": user_dict})
+    
+    # In production, you would send this via email
+    return ForgotPasswordResponse(
+        message="Reset token generated successfully. In production, this would be sent to your email.",
+        reset_token=reset_token
+    )
+
+@api_router.post("/auth/reset-password")
+async def reset_password(request: ResetPasswordRequest):
+    """Reset password using reset token"""
+    user = await get_user_by_email(request.email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if not user.reset_token or user.reset_token != request.reset_token:
+        raise HTTPException(status_code=400, detail="Invalid reset token")
+    
+    if not user.reset_token_expires or user.reset_token_expires < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Reset token has expired")
+    
+    # Update password and clear reset token
+    user.hashed_password = get_password_hash(request.new_password)
+    user.reset_token = None
+    user.reset_token_expires = None
+    
+    user_dict = prepare_for_mongo(user.dict())
+    await db.users.update_one({"id": user.id}, {"$set": user_dict})
+    
+    return {"message": "Password reset successfully"}
+
 @api_router.get("/user/search-history")
 async def get_user_search_history(current_user: User = Depends(get_current_user)):
     """Get user's search history"""
