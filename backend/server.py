@@ -45,6 +45,8 @@ class User(BaseModel):
     searches_used: int = 0
     has_subscription: bool = False
     subscription_date: Optional[datetime] = None
+    reset_token: Optional[str] = None
+    reset_token_expires: Optional[datetime] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_login: Optional[datetime] = None
 
