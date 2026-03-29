@@ -70,6 +70,18 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    reset_token: str
+    new_password: str
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+    reset_token: str  # In production, this would be sent via email
+
 class SearchHistory(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str
