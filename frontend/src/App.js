@@ -89,9 +89,13 @@ const AuthProvider = ({ children }) => {
 
 const LoginPage = () => {
   const [isLogin, setIsLogin] = useState(true);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { login, register } = useAuth();
   const navigate = useNavigate();
@@ -120,6 +124,179 @@ const LoginPage = () => {
     }
     setIsLoading(false);
   };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      const response = await axios.post(`${API}/auth/forgot-password`, { email });
+      toast.success('Reset token generated!');
+      setResetToken(response.data.reset_token);
+      setShowForgotPassword(false);
+      setShowResetPassword(true);
+    } catch (error) {
+      toast.error('Failed to generate reset token');
+    }
+    setIsLoading(false);
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      await axios.post(`${API}/auth/reset-password`, {
+        email,
+        reset_token: resetToken,
+        new_password: newPassword
+      });
+      toast.success('Password reset successfully! You can now login.');
+      setShowResetPassword(false);
+      setIsLogin(true);
+      setPassword('');
+      setNewPassword('');
+      setResetToken('');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Password reset failed');
+    }
+    setIsLoading(false);
+  };
+
+  if (showForgotPassword) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full">
+          <div className="text-center mb-8">
+            <div className="flex items-center justify-center space-x-3 mb-4">
+              <div className="bg-gradient-to-r from-blue-600 to-orange-600 p-3 rounded-lg">
+                <MapPin className="w-8 h-8 text-white" />
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900">Jacksonville Programs Finder</h1>
+            </div>
+            <p className="text-gray-600">Reset your password</p>
+          </div>
+
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-center">Forgot Password</CardTitle>
+              <CardDescription className="text-center">
+                Enter your email to receive a reset token
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    placeholder="Enter your email"
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700"
+                >
+                  {isLoading ? 'Generating...' : 'Generate Reset Token'}
+                </Button>
+              </form>
+
+              <div className="mt-6 text-center">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(false)}
+                  className="text-blue-600 hover:text-blue-700 text-sm"
+                >
+                  Back to sign in
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (showResetPassword) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full">
+          <div className="text-center mb-8">
+            <div className="flex items-center justify-center space-x-3 mb-4">
+              <div className="bg-gradient-to-r from-blue-600 to-orange-600 p-3 rounded-lg">
+                <MapPin className="w-8 h-8 text-white" />
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900">Jacksonville Programs Finder</h1>
+            </div>
+            <p className="text-gray-600">Enter your reset token and new password</p>
+          </div>
+
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-center">Reset Password</CardTitle>
+              <CardDescription className="text-center">
+                Your reset token: <strong className="text-blue-600">{resetToken}</strong>
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <div>
+                  <Label htmlFor="resetToken">Reset Token</Label>
+                  <Input
+                    id="resetToken"
+                    type="text"
+                    value={resetToken}
+                    onChange={(e) => setResetToken(e.target.value)}
+                    required
+                    placeholder="Enter reset token"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="newPassword">New Password</Label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    placeholder="Enter new password"
+                    minLength={6}
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700"
+                >
+                  {isLoading ? 'Resetting...' : 'Reset Password'}
+                </Button>
+              </form>
+
+              <div className="mt-6 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowResetPassword(false);
+                    setShowForgotPassword(false);
+                  }}
+                  className="text-blue-600 hover:text-blue-700 text-sm"
+                >
+                  Back to sign in
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 flex items-center justify-center p-4">
