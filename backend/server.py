@@ -172,6 +172,10 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+def create_reset_token() -> str:
+    """Generate a random reset token"""
+    return str(uuid.uuid4()).replace('-', '')[:16].upper()
+
 async def get_user_by_email(email: str) -> Optional[User]:
     user_doc = await db.users.find_one({"email": email})
     if user_doc:
