@@ -5,7 +5,7 @@ from datetime import datetime
 import uuid
 
 class JacksonvilleProgramsAPITester:
-    def __init__(self, base_url="https://help-jacksonville.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://community-assist-jax.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.test_user_email = f"test_user_{datetime.now().strftime('%H%M%S')}@example.com"
         self.test_user_password = "TestPass123!"
