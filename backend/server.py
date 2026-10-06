@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from openai import AsyncOpenAI
 import re
 import jwt
 import bcrypt
@@ -311,45 +311,50 @@ async def init_programs():
 async def ai_search_programs(query: str, all_programs: List[Program]) -> SearchResult:
     """Use AI to match user query with relevant programs"""
     try:
-        # Initialize LLM chat
-        chat = LlmChat(
-            api_key=os.environ.get('EMERGENT_LLM_KEY'),
-            session_id=f"search_{uuid.uuid4()}",
-            system_message="""You are an expert assistant for Jacksonville government assistance programs. 
+        api_key = os.environ.get('OPENAI_API_KEY')
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY not configured")
+
+        client_ai = AsyncOpenAI(api_key=api_key)
+
+        system_message = """You are an expert assistant for Jacksonville government assistance programs.
             When users describe their needs, match them with the most relevant programs from the provided list.
-            
+
             Respond with ONLY a JSON object containing:
             {
                 "relevant_program_ids": ["id1", "id2", ...],
                 "explanation": "Brief explanation of why these programs match the user's needs"
             }
-            
+
             Consider these matching criteria:
             - Keywords in program names and descriptions
             - Eligibility requirements that match user's situation
             - Categories and agencies that serve user's needs
             - Notes and benefits that address user's specific problems
-            
+
             Examples of user queries and what they might need:
             - "help with electric bill" → utility assistance programs
             - "small business facade grant" → commercial improvement grants
             - "energy efficiency rebates" → JEA rebate programs
             - "low income housing help" → housing assistance programs
             - "emergency financial assistance" → crisis aid programs"""
-        ).with_model("openai", "gpt-4o-mini")
-        
+
         # Create program context for AI
         program_context = "\n".join([
             f"ID: {p.id}\nProgram: {p.program}\nCategory: {p.category}\nAgency: {p.agency}\nEligibility: {p.eligibility}\nNotes: {p.notes}\n---"
             for p in all_programs
         ])
-        
-        user_message = UserMessage(
-            text=f"User query: '{query}'\n\nAvailable programs:\n{program_context}\n\nFind the most relevant programs for this user's needs."
+
+        completion = await client_ai.chat.completions.create(
+            model="gpt-4o-mini",
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": f"User query: '{query}'\n\nAvailable programs:\n{program_context}\n\nFind the most relevant programs for this user's needs."}
+            ]
         )
-        
-        response = await chat.send_message(user_message)
-        
+        response = completion.choices[0].message.content
+
         # Parse AI response
         import json
         try:
