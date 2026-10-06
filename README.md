@@ -6,9 +6,15 @@ assistance, etc.). Users describe their situation in plain language and the
 backend matches them against a program list, either with an LLM or a keyword
 fallback.
 
-Originally built on [Emergent](https://emergent.sh) (see `.emergent/emergent.yml`
-and the `emergentintegrations` backend dependency) — the sections below audit
-what that leaves behind for anyone running or hosting this outside Emergent.
+Originally built on [Emergent](https://emergent.sh). The code no longer depends
+on Emergent's platform: the proprietary `emergentintegrations` package has been
+replaced with a direct OpenAI client call, Emergent's job metadata
+(`.emergent/`) and its own committed git identity (`.gitconfig`) have been
+removed, and the "Made with Emergent" badge plus Emergent's own PostHog
+analytics key have been stripped from `frontend/public/index.html`. The app
+itself, however, is **still physically hosted on Emergent's preview
+infrastructure** — see "Where it's deployed" below for what that still
+requires from you.
 
 ## Stack
 
@@ -34,8 +40,8 @@ Requires Node 18+/Yarn, Python 3.11+, and a MongoDB instance (Atlas or local).
 # Backend
 cd backend
 python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt   # see "Does it build" below — this currently fails
-cp .env.example .env              # fill in real values
+pip install -r requirements.txt
+cp .env.example .env              # fill in real values (MONGO_URL at minimum)
 uvicorn server:app --reload --port 8001
 
 # Frontend
@@ -49,28 +55,30 @@ Required environment variables are listed in `backend/.env.example`.
 
 ## Status
 
-### Does it build? — No, not as-is
+### Does it build? — Yes, now that Emergent's private package is gone
 
-- `backend/requirements.txt` pins `emergentintegrations==0.1.0`, which is
-  **Emergent's own private package** — it is not published to PyPI
-  (`pip install emergentintegrations` fails with "No matching distribution
-  found" from the public index). `backend/server.py` imports it directly
-  (`from emergentintegrations.llm.chat import LlmChat, UserMessage`) to call
-  an LLM via `EMERGENT_LLM_KEY`, which is Emergent's own billing/proxy key,
-  not a real OpenAI key. **The backend cannot be installed or run outside
-  Emergent's platform until this is swapped for a direct provider SDK call.**
+- `backend/requirements.txt` used to pin `emergentintegrations==0.1.0`,
+  **Emergent's own private package**, not published to PyPI (`pip install
+  emergentintegrations` failed with "No matching distribution found" from
+  the public index). That's been removed; `ai_search_programs` now calls
+  `AsyncOpenAI` directly and reads a plain `OPENAI_API_KEY`, falling back to
+  the existing keyword search if it's unset or the call fails for any reason.
+  `pip install -r backend/requirements.txt` now succeeds against public PyPI.
+- The backend still won't *run* without a real `MONGO_URL` (there's no local
+  Mongo bundled — `os.environ['MONGO_URL']` raises `KeyError` if unset,
+  which is expected/correct behavior, not a bug).
 - The frontend builds and compiles cleanly on its own: `yarn build` in
-  `frontend/` succeeds with no errors (verified in this pass).
-- There is no CI configuration in the repo (only `.emergent/emergent.yml`,
-  which is Emergent's own job metadata, not a build pipeline).
+  `frontend/` succeeds with no errors (verified in this pass, before and
+  after removing Emergent's badge/analytics from `index.html`).
+- There is no CI configuration in the repo.
 
 ### What's missing / broken
 
 - **No real test suite.** `tests/` only contains an empty `__init__.py`.
-  `backend_test.py` is a standalone script (not pytest) that hardcodes the
-  *live* Emergent preview URL (`community-assist-jax.preview.emergentagent.com`)
-  as its target — it's written to hit a running deployment, not to run
-  locally or in CI against this code.
+  `backend_test.py` is a standalone script (not pytest) meant to hit a
+  running deployment rather than run locally/in CI against this code — it
+  now defaults to `http://localhost:8001/api` (override with
+  `BACKEND_TEST_URL`) instead of the hardcoded Emergent preview URL.
 - **No payment integration.** `stripe` is listed in `backend/requirements.txt`
   but never imported or used anywhere in `server.py`. "Subscribing" just sets
   a boolean on the user record with no payment collected.
@@ -83,14 +91,16 @@ Required environment variables are listed in `backend/.env.example`.
   string `"jacksonville-programs-finder-secret-key"` if the env var isn't
   set — anyone deploying this without explicitly setting that variable
   issues forgeable tokens.
-- **AI search depends on Emergent's LLM proxy** (see above) — needs a real
-  `OPENAI_API_KEY` (or equivalent provider swap) to work anywhere else.
-  Keyword-only fallback works regardless.
+- **AI search needs a real `OPENAI_API_KEY`** to do anything beyond the
+  keyword fallback — nobody has supplied one yet.
 - **Hosting**: as deployed on Emergent, the preview environment sleeps when
   inactive and has to be manually resumed from the Emergent dashboard before
   the site responds (it was down for this reason during this audit — see
   `claude/site-downtime-investigation-prz0mg` branch/PR for the live
-  diagnosis and an in-progress Vercel migration).
+  diagnosis and an in-progress Vercel migration). Removing Emergent from the
+  *code* (this PR) doesn't remove the app from Emergent's *platform* — that
+  still means logging into app.emergent.sh and deleting/stopping the project
+  there, which this session has no credentials to do.
 
 ### How to run it
 
@@ -115,14 +125,16 @@ doesn't have access to:
 1. **MongoDB hosting for a non-Emergent deployment** — needs a real
    connection string (e.g. a MongoDB Atlas cluster) to run anywhere outside
    Emergent.
-2. **A real `OPENAI_API_KEY`** (or a decision to ship without AI search) to
-   replace Emergent's proxied LLM key.
-3. **Stripe test-mode keys**, plus a decision on whether `/payment/subscribe`
+2. **A real `OPENAI_API_KEY`** (or a decision to ship without AI search).
+3. **Access to the Emergent account/dashboard** if you actually want the
+   project deleted or stopped there (not just decoupled in code) — this
+   session can't do that without login access.
+4. **Stripe test-mode keys**, plus a decision on whether `/payment/subscribe`
    should actually be wired to Stripe Checkout or stays a manual/stub flow.
-4. **Whether to add an admin role** and lock down `/api/programs` write
+5. **Whether to add an admin role** and lock down `/api/programs` write
    access and `/api/admin/init-programs` to admins only (currently any
    logged-in user, or in the init case anyone at all, can modify the
    program directory).
-5. **Confirmation of the Vercel migration path** (new Atlas cluster vs.
+6. **Confirmation of the Vercel migration path** (new Atlas cluster vs.
    migrating existing Emergent Mongo data) started on
    `claude/site-downtime-investigation-prz0mg`.

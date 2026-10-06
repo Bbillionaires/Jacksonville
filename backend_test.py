@@ -1,3 +1,4 @@
+import os
 import requests
 import sys
 import json
@@ -5,7 +6,7 @@ from datetime import datetime
 import uuid
 
 class JacksonvilleProgramsAPITester:
-    def __init__(self, base_url="https://community-assist-jax.preview.emergentagent.com/api"):
+    def __init__(self, base_url=os.environ.get("BACKEND_TEST_URL", "http://localhost:8001/api")):
         self.base_url = base_url
         self.test_user_email = f"test_user_{datetime.now().strftime('%H%M%S')}@example.com"
         self.test_user_password = "TestPass123!"
